@@ -1,2 +1,3 @@
-# cross-layer-telemetry
-Cross Layer Telemetry with IPv6 IOAM
+# Coming soon...
+
+![Topology](./topology.png?raw=true "Topology")
