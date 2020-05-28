@@ -1,4 +1,4 @@
-Flask==0.12.5
+Flask==1.0
 requests==2.23.0
 jaeger-client==4.3.0
 pyinstaller==3.6
