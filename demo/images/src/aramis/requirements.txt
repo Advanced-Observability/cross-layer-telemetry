@@ -1,4 +1,4 @@
-Flask==0.12.5
+Flask==1.0
 grpcio==1.28.1
 grpcio-tools==1.28.1
 bitstruct==8.10.0
