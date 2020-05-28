@@ -1,0 +1,125 @@
+version: "3.8"
+
+services:
+  elasticsearch:
+    container_name: elasticsearch
+    image: elasticsearch:7.6.2
+    environment:
+      - discovery.type=single-node
+    networks:
+      elasticsearch_network:
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  jaeger-query:
+    container_name: jaeger-query
+    image: jaegertracing/jaeger-query:latest
+    ports:
+      - "16686:16686/tcp"
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+    networks:
+      elasticsearch_network:
+    depends_on:
+      - elasticsearch
+    restart: on-failure
+
+  jaeger-collector:
+    container_name: jaeger-collector
+    image: jaegertracing/jaeger-collector:latest
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+    networks:
+      collectors_network:
+      elasticsearch_network:
+    depends_on:
+      - elasticsearch
+    restart: on-failure
+
+  ioam-collector:
+    container_name: ioam-collector
+    image: ioam-collector:latest
+    environment:
+      - REPORTER_GRPC_HOST_PORT=jaeger-collector:14250
+    networks:
+      collectors_network:
+    depends_on:
+      - jaeger-collector
+
+  athos:
+    container_name: athos
+    image: athos:latest
+    environment:
+      - REPORTER_GRPC_HOST_PORT=jaeger-collector:14250
+      - JAEGER_TRACEID_128BIT=true
+    ports:
+      - "15123:15123/tcp"
+    networks:
+      ioam12_network:
+        ipv6_address: db01::1
+      collectors_network:
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+    devices:
+      - /dev/ioam:/dev/ioam
+    depends_on:
+      - jaeger-collector
+
+  porthos:
+    container_name: porthos
+    image: porthos:latest
+    networks:
+      ioam12_network:
+        ipv6_address: db01::2
+      ioam23_network:
+        ipv6_address: db02::1
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+    devices:
+      - /dev/ioam:/dev/ioam
+
+  aramis:
+    container_name: aramis
+    image: aramis:latest
+    environment:
+      - IOAM_COLLECTOR=ioam-collector:7123
+    networks:
+      ioam23_network:
+        ipv6_address: db02::2
+      collectors_network:
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+    devices:
+      - /dev/ioam:/dev/ioam
+    depends_on:
+      - ioam-collector
+
+volumes:
+  esdata:
+    name: elasticsearch
+    driver: local
+
+networks:
+  ioam12_network:
+    external:
+      name: ioam12_network
+
+  ioam23_network:
+    external:
+      name: ioam23_network
+
+  collectors_network:
+    name: collectors_network
+    driver: bridge
+
+  elasticsearch_network:
+    name: elasticsearch_network
+    driver: bridge
+

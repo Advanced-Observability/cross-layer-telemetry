@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+package ioam_trace;
+
+option go_package = ".;ioam_trace";
+
+service IOAMService {
+	rpc Report (IOAMTrace) returns (google.protobuf.Empty) {}
+}
+
+message IOAMTrace {
+	fixed64 TraceId_High = 1;
+	fixed64 TraceId_Low = 2;
+	fixed64 SpanId = 3;
+	uint32 NamespaceId = 4;
+	fixed32 BitField = 5;
+	repeated IOAMNode Nodes = 6;
+}
+
+message OpaqueState {
+	uint32 SchemaId = 1;
+	bytes Data = 2; //variable length field
+}
+
+message IOAMNode {
+	uint32 HopLimit = 1;
+	oneof Node {
+		uint32 Id = 2;
+		uint64 WideId = 3;
+	}
+	uint32 IngressId = 4;
+	uint32 EgressId = 5;
+	uint32 Timestamp = 6;
+	uint32 TimestampSub = 7;
+	uint32 TransitDelay = 8;
+	uint32 EgressQDepth = 9;
+	uint32 BufferOccupancy = 10;
+	oneof Namespace {
+		bytes Data = 11; //4-octet field
+		bytes WideData = 12; //8-octet field
+	}
+	OpaqueState OSS = 13;
+}
