@@ -43,7 +43,7 @@ services:
     image: ioam-collector
     #build: ./docker/ioam-collector
     environment:
-      - REPORTER_GRPC_HOST_PORT=jaeger-collector:14250
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger-collector:14268/api/traces
     networks:
       - collectors_network
     depends_on:

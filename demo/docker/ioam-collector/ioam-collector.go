@@ -1,20 +1,31 @@
 package main
 
 import (
+	"context"
+	"encoding/hex"
 	"log"
 	"net"
 	"strconv"
-	"encoding/hex"
+	"time"
 
-	"ioam"
+	"ioam" //TODO "ioam_trace" instead?
 	empty "github.com/golang/protobuf/ptypes/empty"
-
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
-	"github.com/uber/jaeger-client-go"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/jaeger"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/trace"
+	tracesdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+)
+
+const (
+	service     = "trace-demo"
+	environment = "production"
+	id          = 1
 )
 
 var HAS_HOP_LIM   = uint32(1 << 31)
@@ -29,24 +40,26 @@ var HAS_BUFFER_OC = uint32(1 << 23)
 var HAS_NS_DATA   = uint32(1 << 22)
 var HAS_OPAQUE    = uint32(1 << 21)
 
-var cfg = jaegercfg.Configuration{
-	ServiceName: "API Request",
-	Sampler: &jaegercfg.SamplerConfig{
-		Type:  jaeger.SamplerTypeConst,
-		Param: 1,
-	},
-	Reporter: &jaegercfg.ReporterConfig{
-		LogSpans: true,
-	},
-}
-
 func main() {
+	exp, err := jaeger.New(jaeger.WithCollectorEndpoint())
+	if err != nil {
+		log.Fatal(err)
+	}
+	tp := tracesdk.NewTracerProvider(
+		tracesdk.WithBatcher(exp),
+		tracesdk.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String(service),
+			attribute.String("environment", environment),
+			attribute.Int64("ID", id),
+		)),
+	)
+	otel.SetTracerProvider(tp)
+
 	grpcServer := grpc.NewServer()
 	var server Server
-
 	ioam_trace.RegisterIOAMServiceServer(grpcServer, server)
 	listen, err := net.Listen("tcp", ":7123")
-
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
 	}
@@ -58,39 +71,23 @@ func main() {
 type Server struct{}
 
 func (Server) Report(grpc_ctx context.Context, request *ioam_trace.IOAMTrace) (*empty.Empty, error) {
-	tracer, closer, err := cfg.NewTracer(
-		jaegercfg.Logger(jaegerlog.StdLogger),
-	)
-	if err != nil {
-		log.Printf("Could not initialize jaeger tracer: %s", err.Error())
-		return new(empty.Empty), nil
-	}
-	defer closer.Close()
+	span_ctx := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: xxx, //TODO merge request.GetTraceId_High() and request.GetTraceId_Low()
+		SpanID: request.GetSpanId(),
+	})
+	ctx := trace.ContextWithSpanContext(context.Background(), span_ctx)
 
-	ctx := jaeger.NewSpanContext(
-		jaeger.TraceID {
-			High: request.GetTraceId_High(),
-			Low:  request.GetTraceId_Low(),
-		},
-		jaeger.SpanID(request.GetSpanId()),
-		jaeger.SpanID(0),
-		false,
-		nil,
-	)
-
-	span := tracer.StartSpan(
-		"ioam-span",
-		jaeger.SelfRef(ctx),
-	)
+	tracer := otel.Tracer("ioam-tracer")
+	_, span := tracer.Start(ctx, "ioam-span")
 
 	i := 1
 	for _, node := range request.GetNodes() {
 		str := ParseNode(node, request.GetBitField())
-		span.SetTag("ioam_namespace" + strconv.FormatUint(uint64(request.GetNamespaceId()), 10) +"_node" + strconv.Itoa(i), str)
+		span.SetAttributes("ioam_namespace" + strconv.FormatUint(uint64(request.GetNamespaceId()), 10) +"_node" + strconv.Itoa(i), str)
 		i += 1
 	}
-	span.Finish()
 
+	span.End()
 	return new(empty.Empty), nil
 }
 
