@@ -64,9 +64,9 @@ services:
       collectors_network:
     cap_add:
       - NET_ADMIN
-    #sysctls:
-    #  - net.ipv6.ioam6_id=1
-    #  - net.ipv6.conf.eth0.ioam6_id=11
+    sysctls:
+      - net.ipv6.ioam6_id=1
+      - net.ipv6.conf.eth0.ioam6_id=11
     depends_on:
       - jaeger-collector
       - aramis
@@ -84,10 +84,10 @@ services:
       - NET_ADMIN
     sysctls:
       - net.ipv6.conf.all.forwarding=1
-    #  - net.ipv6.ioam6_id=2
-    #  - net.ipv6.conf.eth0.ioam6_enabled=1
-    #  - net.ipv6.conf.eth0.ioam6_id=21
-    #  - net.ipv6.conf.eth1.ioam6_id=22
+      - net.ipv6.ioam6_id=2
+      - net.ipv6.conf.eth0.ioam6_enabled=1
+      - net.ipv6.conf.eth0.ioam6_id=21
+      - net.ipv6.conf.eth1.ioam6_id=22
 
   aramis:
     container_name: aramis
@@ -101,10 +101,10 @@ services:
       collectors_network:
     cap_add:
       - NET_ADMIN
-    #sysctls:
-    #  - net.ipv6.ioam6_id=3
-    #  - net.ipv6.conf.eth0.ioam6_enabled=1
-    #  - net.ipv6.conf.eth0.ioam6_id=31
+    sysctls:
+      - net.ipv6.ioam6_id=3
+      - net.ipv6.conf.eth0.ioam6_enabled=1
+      - net.ipv6.conf.eth0.ioam6_id=31
     depends_on:
       - ioam-collector
 
