@@ -26,11 +26,6 @@ urllib3.connectionpool.HTTPConnectionPool.ConnectionCls = MyHTTPConnection
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 def trace_request(web_path, clt, http, tracer, span_name):
-    span = tracer.start_span(span_name)
-
-    sock = MyHTTPConnection.open_socket
-    clt.enable(sock.fileno(), span.context.trace_id, span.context.span_id)
-
     data = {
         'username': request.form.get('username'), 
         'password': request.form.get('password'),
@@ -38,6 +33,11 @@ def trace_request(web_path, clt, http, tracer, span_name):
 
     body = json.dumps(data).encode('utf-8')
     headers = {'Content-Type': 'application/json'}
+
+    span = tracer.start_span(span_name)
+
+    sock = MyHTTPConnection.open_socket
+    clt.enable(sock.fileno(), span.context.trace_id, span.context.span_id)
 
     # START MONITORING
     span._start_time = int(time.time() * 1e9)
