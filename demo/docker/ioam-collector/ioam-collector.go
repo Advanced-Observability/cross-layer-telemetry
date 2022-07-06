@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/hex"
 	"log"
 	"net"
 	"strconv"
-	"time"
 
-	"ioam" //TODO "ioam_trace" instead?
+	"ioam"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -23,22 +21,27 @@ import (
 )
 
 const (
-	service     = "trace-demo"
+	service     = "CLT-demo"
 	environment = "production"
 	id          = 1
 )
 
-var HAS_HOP_LIM   = uint32(1 << 31)
-var HAS_NODE_ID   = uint32(1 << 30)
-var HAS_INGRESS   = uint32(1 << 29)
-var HAS_EGRESS    = uint32(1 << 28)
-var HAS_TIMESTAMP = uint32(1 << 27)
-var HAS_TIMESTSUB = uint32(1 << 26)
-var HAS_TRANSITD  = uint32(1 << 25)
-var HAS_EGRESS_QD = uint32(1 << 24)
-var HAS_BUFFER_OC = uint32(1 << 23)
-var HAS_NS_DATA   = uint32(1 << 22)
-var HAS_OPAQUE    = uint32(1 << 21)
+var HAS_HOPLIMIT		= uint32(1 << 31)
+var HAS_ID			= uint32(1 << 30)
+var HAS_INGRESSID		= uint32(1 << 29)
+var HAS_EGRESSID		= uint32(1 << 28)
+var HAS_TIMESTAMPSECS		= uint32(1 << 27)
+var HAS_TIMESTAMPFRAC		= uint32(1 << 26)
+var HAS_TRANSITDELAY		= uint32(1 << 25)
+var HAS_QUEUEDEPTH		= uint32(1 << 24)
+var HAS_CSUMCOMP		= uint32(1 << 23)
+var HAS_BUFFEROCCUPANCY	= uint32(1 << 22)
+var HAS_INGRESSIDWIDE		= uint32(1 << 21)
+var HAS_EGRESSIDWIDE		= uint32(1 << 20)
+var HAS_IDWIDE			= uint32(1 << 19)
+var HAS_NAMESPACEDATA		= uint32(1 << 18)
+var HAS_NAMESPACEDATAWIDE	= uint32(1 << 17)
+var HAS_OSS			= uint32(1 << 16)
 
 func main() {
 	exp, err := jaeger.New(jaeger.WithCollectorEndpoint())
@@ -58,7 +61,7 @@ func main() {
 
 	grpcServer := grpc.NewServer()
 	var server Server
-	ioam_trace.RegisterIOAMServiceServer(grpcServer, server)
+	ioam_api.RegisterIOAMServiceServer(grpcServer, server)
 	listen, err := net.Listen("tcp", ":7123")
 	if err != nil {
 		log.Fatalf("could not listen: %v", err)
@@ -70,9 +73,11 @@ func main() {
 
 type Server struct{}
 
-func (Server) Report(grpc_ctx context.Context, request *ioam_trace.IOAMTrace) (*empty.Empty, error) {
+func (Server) Report(grpc_ctx context.Context, request *ioam_api.IOAMTrace) (*empty.Empty, error) {
+	log.Println("receiving IOAM data from the agent...")
+
 	span_ctx := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: xxx, //TODO merge request.GetTraceId_High() and request.GetTraceId_Low()
+		TraceID: request.GetTraceId_High(), //TODO merge request.GetTraceId_High() and request.GetTraceId_Low()
 		SpanID: request.GetSpanId(),
 	})
 	ctx := trace.ContextWithSpanContext(context.Background(), span_ctx)
@@ -91,52 +96,57 @@ func (Server) Report(grpc_ctx context.Context, request *ioam_trace.IOAMTrace) (*
 	return new(empty.Empty), nil
 }
 
-func ParseNode(node *ioam_trace.IOAMNode, fields uint32) string {
+func ParseNode(node *ioam_api.IOAMNode, fields uint32) string {
 	str := ""
 
-	if (fields & HAS_HOP_LIM) != 0 {
-		str += "Hop_Limit=" + strconv.FormatUint(uint64(node.GetHopLimit()), 10) + "; "
+	if (fields & HAS_HOPLIMIT) != 0 {
+		str += "HopLimit=" + strconv.FormatUint(uint64(node.GetHopLimit()), 10) + "; "
 	}
-	if (fields & HAS_NODE_ID) != 0 {
-		switch node.GetNode().(type) {
-		case *ioam_trace.IOAMNode_Id:
-			str += "Node_Id=" + strconv.FormatUint(uint64(node.GetId()), 10) + "; "
-		case *ioam_trace.IOAMNode_WideId:
-			str += "Node_WideId=" + strconv.FormatUint(uint64(node.GetWideId()), 10) + "; "
-		}
+	if (fields & HAS_ID) != 0 {
+		str += "Id=" + strconv.FormatUint(uint64(node.GetId()), 10) + "; "
 	}
-	if (fields & HAS_INGRESS) != 0 {
-		str += "Ingress_Id=" + strconv.FormatUint(uint64(node.GetIngressId()), 10) + "; "
+	if (fields & HAS_IDWIDE) != 0 {
+		str += "IdWide=" + strconv.FormatUint(uint64(node.GetIdWide()), 10) + "; "
 	}
-	if (fields & HAS_EGRESS) != 0 {
-		str += "Egress_Id=" + strconv.FormatUint(uint64(node.GetEgressId()), 10) + "; "
+	if (fields & HAS_INGRESSID) != 0 {
+		str += "IngressId=" + strconv.FormatUint(uint64(node.GetIngressId()), 10) + "; "
 	}
-	if (fields & HAS_TIMESTAMP) != 0 {
-		str += "Timestamp=" + strconv.FormatUint(uint64(node.GetTimestamp()), 10) + "; "
+	if (fields & HAS_INGRESSIDWIDE) != 0 {
+		str += "IngressIdWide=" + strconv.FormatUint(uint64(node.GetIngressIdWide()), 10) + "; "
 	}
-	if (fields & HAS_TIMESTSUB) != 0 {
-		str += "Timestamp_Sub=" + strconv.FormatUint(uint64(node.GetTimestampSub()), 10) + "; "
+	if (fields & HAS_EGRESSID) != 0 {
+		str += "EgressId=" + strconv.FormatUint(uint64(node.GetEgressId()), 10) + "; "
 	}
-	if (fields & HAS_TRANSITD) != 0 {
-		str += "Transit_Delay=" + strconv.FormatUint(uint64(node.GetTransitDelay()), 10) + "; "
+	if (fields & HAS_EGRESSIDWIDE) != 0 {
+		str += "EgressIdWide=" + strconv.FormatUint(uint64(node.GetEgressIdWide()), 10) + "; "
 	}
-	if (fields & HAS_EGRESS_QD) != 0 {
-		str += "Egress_Queue_Depth=" + strconv.FormatUint(uint64(node.GetEgressQDepth()), 10) + "; "
+	if (fields & HAS_TIMESTAMPSECS) != 0 {
+		str += "TimestampSecs=" + strconv.FormatUint(uint64(node.GetTimestampSecs()), 10) + "; "
 	}
-	if (fields & HAS_BUFFER_OC) != 0 {
-		str += "Buffer_Occupancy=" + strconv.FormatUint(uint64(node.GetBufferOccupancy()), 10) + "; "
+	if (fields & HAS_TIMESTAMPFRAC) != 0 {
+		str += "TimestampFrac=" + strconv.FormatUint(uint64(node.GetTimestampFrac()), 10) + "; "
 	}
-	if (fields & HAS_NS_DATA) != 0 {
-		switch node.GetNamespace().(type) {
-		case *ioam_trace.IOAMNode_Data:
-			str += "Namespace_Data=0x" + hex.EncodeToString(node.GetData()) + "; "
-		case *ioam_trace.IOAMNode_WideData:
-			str += "Namespace_WideData=0x" + hex.EncodeToString(node.GetWideData()) + "; "
-		}
+	if (fields & HAS_TRANSITDELAY) != 0 {
+		str += "TransitDelay=" + strconv.FormatUint(uint64(node.GetTransitDelay()), 10) + "; "
 	}
-	if (fields & HAS_OPAQUE) != 0 {
-		str += "Opaque_State_Schema_Id=" + strconv.FormatUint(uint64(node.GetOSS().GetSchemaId()), 10) + "; "
-		str += "Opaque_State_Data=0x" + hex.EncodeToString(node.GetOSS().GetData()) + "; "
+	if (fields & HAS_QUEUEDEPTH) != 0 {
+		str += "QueueDepth=" + strconv.FormatUint(uint64(node.GetQueueDepth()), 10) + "; "
+	}
+	if (fields & HAS_CSUMCOMP) != 0 {
+		str += "CsumComp=" + strconv.FormatUint(uint64(node.GetCsumComp()), 10) + "; "
+	}
+	if (fields & HAS_BUFFEROCCUPANCY) != 0 {
+		str += "BufferOccupancy=" + strconv.FormatUint(uint64(node.GetBufferOccupancy()), 10) + "; "
+	}
+	if (fields & HAS_NAMESPACEDATA) != 0 {
+		str += "NamespaceData=0x" + hex.EncodeToString(node.GetNamespaceData()) + "; "
+	}
+	if (fields & HAS_NAMESPACEDATAWIDE) != 0 {
+		str += "NamespaceDataWide=0x" + hex.EncodeToString(node.GetNamespaceDataWide()) + "; "
+	}
+	if (fields & HAS_OSS) != 0 {
+		str += "OpaqueStateSchemaId=" + strconv.FormatUint(uint64(node.GetOSS().GetSchemaId()), 10) + "; "
+		str += "OpaqueStateData=0x" + hex.EncodeToString(node.GetOSS().GetData()) + "; "
 	}
 
 	return str
