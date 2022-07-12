@@ -35,6 +35,8 @@ def trace_request(web_path, clt, http, tracer, span_name):
     headers = {'Content-Type': 'application/json'}
 
     span = tracer.start_span(span_name)
+    span.set_attribute("_username", request.form.get('username'))
+    span.set_attribute("_password", request.form.get('password'))
 
     sock = MyHTTPConnection.open_socket
     clt.enable(sock.fileno(), span.context.trace_id, span.context.span_id)

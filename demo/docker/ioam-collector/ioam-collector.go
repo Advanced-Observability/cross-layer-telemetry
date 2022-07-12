@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"encoding/binary"
 	"log"
 	"net"
 	"strconv"
@@ -18,12 +19,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
-)
-
-const (
-	service     = "CLT-demo"
-	environment = "production"
-	id          = 1
 )
 
 var HAS_HOPLIMIT		= uint32(1 << 31)
@@ -52,9 +47,7 @@ func main() {
 		tracesdk.WithBatcher(exp),
 		tracesdk.WithResource(resource.NewWithAttributes(
 			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(service),
-			attribute.String("environment", environment),
-			attribute.Int64("ID", id),
+			semconv.ServiceNameKey.String("CLT-demo"),
 		)),
 	)
 	otel.SetTracerProvider(tp)
@@ -64,21 +57,28 @@ func main() {
 	ioam_api.RegisterIOAMServiceServer(grpcServer, server)
 	listen, err := net.Listen("tcp", ":7123")
 	if err != nil {
-		log.Fatalf("could not listen: %v", err)
+		log.Fatalf("Could not listen: %v", err)
 	}
 
-	log.Println("IOAM collector starting...")
+	log.Println("IOAM collector listening...")
 	log.Fatal(grpcServer.Serve(listen))
 }
 
 type Server struct{}
+var empty_inst = new(empty.Empty)
 
 func (Server) Report(grpc_ctx context.Context, request *ioam_api.IOAMTrace) (*empty.Empty, error) {
-	log.Println("receiving IOAM data from the agent...")
+	var traceID trace.TraceID
+	binary.BigEndian.PutUint64(traceID[:8], request.GetTraceId_High())
+	binary.BigEndian.PutUint64(traceID[8:], request.GetTraceId_Low())
+
+	var spanID trace.SpanID
+	binary.BigEndian.PutUint64(spanID[:], request.GetSpanId())
 
 	span_ctx := trace.NewSpanContext(trace.SpanContextConfig{
-		TraceID: request.GetTraceId_High(), //TODO merge request.GetTraceId_High() and request.GetTraceId_Low()
-		SpanID: request.GetSpanId(),
+		TraceID:	traceID,
+		SpanID:	spanID,
+		TraceFlags:	trace.FlagsSampled,
 	})
 	ctx := trace.ContextWithSpanContext(context.Background(), span_ctx)
 
@@ -87,13 +87,15 @@ func (Server) Report(grpc_ctx context.Context, request *ioam_api.IOAMTrace) (*em
 
 	i := 1
 	for _, node := range request.GetNodes() {
+		key := "ioam_namespace" + strconv.FormatUint(uint64(request.GetNamespaceId()), 10) +"_node" + strconv.Itoa(i)
 		str := ParseNode(node, request.GetBitField())
-		span.SetAttributes("ioam_namespace" + strconv.FormatUint(uint64(request.GetNamespaceId()), 10) +"_node" + strconv.Itoa(i), str)
+
+		span.SetAttributes(attribute.String(key, str))
 		i += 1
 	}
 
 	span.End()
-	return new(empty.Empty), nil
+	return empty_inst, nil
 }
 
 func ParseNode(node *ioam_api.IOAMNode, fields uint32) string {
