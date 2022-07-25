@@ -75,7 +75,7 @@ index ca4b22833754..0272d0b9e173 100644
  };
  
 diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index f7309452bdce..0b745c183e70 100644
+index f7309452bdce..d2b148c8df07 100644
 --- a/net/ipv4/tcp.c
 +++ b/net/ipv4/tcp.c
 @@ -1218,7 +1218,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
@@ -87,7 +87,7 @@ index f7309452bdce..0b745c183e70 100644
  	long timeo;
  
  	flags = msg->msg_flags;
-@@ -1299,9 +1299,16 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
+@@ -1299,9 +1299,14 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
  		int copy = 0;
  
  		skb = tcp_write_queue_tail(sk);
@@ -95,25 +95,21 @@ index f7309452bdce..0b745c183e70 100644
 +		if (skb) {
  			copy = size_goal - skb->len;
  
-+			slow = lock_sock_fast(sk);
 +			skb->id.high = READ_ONCE(sk->sk_pkt_id.high);
 +			skb->id.low = READ_ONCE(sk->sk_pkt_id.low);
 +			skb->sid = READ_ONCE(sk->sk_pkt_sid);
-+			unlock_sock_fast(sk, slow);
 +		}
 +
  		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
  			bool first_skb;
  
-@@ -1320,6 +1327,12 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
+@@ -1320,6 +1325,10 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
  			if (!skb)
  				goto wait_for_space;
  
-+			slow = lock_sock_fast(sk);
 +			skb->id.high = READ_ONCE(sk->sk_pkt_id.high);
 +			skb->id.low = READ_ONCE(sk->sk_pkt_id.low);
 +			skb->sid = READ_ONCE(sk->sk_pkt_sid);
-+			unlock_sock_fast(sk, slow);
 +
  			process_backlog++;
  

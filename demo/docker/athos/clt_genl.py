@@ -5,8 +5,8 @@ from pyroute2.netlink.generic import GenericNetlinkSocket
 IOAM6_GENL_NAME = 'IOAM6'
 IOAM6_GENL_VERSION = 1
 
-IOAM6_CMD_CLT_SET = 8
-IOAM6_CMD_CLT_UNSET = 9
+IOAM6_CMD_PKT_ID_ENABLE = 8
+IOAM6_CMD_PKT_ID_DISABLE = 9
 
 class cltcmd(genlmsg):
     '''
@@ -22,10 +22,10 @@ class cltcmd(genlmsg):
         ('IOAM6_ATTR_SC_DATA', 'cdata'),
         ('IOAM6_ATTR_SC_NONE', 'flag'),
         ('IOAM6_ATTR_PAD', 'none'),
-        ('IOAM6_ATTR_CLT_SOCKFD', 'uint32'),
-        ('IOAM6_ATTR_CLT_TRACEID_HIGH', 'uint64'),
-        ('IOAM6_ATTR_CLT_TRACEID_LOW', 'uint64'),
-        ('IOAM6_ATTR_CLT_SPANID', 'uint64'),
+        ('IOAM6_ATTR_SOCKFD', 'uint32'),
+        ('IOAM6_ATTR_ID_HIGH', 'uint64'),
+        ('IOAM6_ATTR_ID_LOW', 'uint64'),
+        ('IOAM6_ATTR_SUBID', 'uint64'),
     )
 
 class CrossLayerTelemetry(GenericNetlinkSocket):
@@ -43,21 +43,21 @@ class CrossLayerTelemetry(GenericNetlinkSocket):
         traceId_h = traceId >> 64
         traceId_l = traceId & 0x0000000000000000ffffffffffffffff
 
-        msg['cmd'] = IOAM6_CMD_CLT_SET
+        msg['cmd'] = IOAM6_CMD_PKT_ID_ENABLE
         msg['version'] = IOAM6_GENL_VERSION
-        msg['attrs'].append(('IOAM6_ATTR_CLT_SOCKFD', sockfd))
-        msg['attrs'].append(('IOAM6_ATTR_CLT_TRACEID_HIGH', traceId_h))
-        msg['attrs'].append(('IOAM6_ATTR_CLT_TRACEID_LOW', traceId_l))
-        msg['attrs'].append(('IOAM6_ATTR_CLT_SPANID', spanId))
+        msg['attrs'].append(('IOAM6_ATTR_SOCKFD', sockfd))
+        msg['attrs'].append(('IOAM6_ATTR_ID_HIGH', traceId_h))
+        msg['attrs'].append(('IOAM6_ATTR_ID_LOW', traceId_l))
+        msg['attrs'].append(('IOAM6_ATTR_SUBID', spanId))
 
         return self.nlm_request(msg, msg_type=self.prid, msg_flags=NLM_F_REQUEST | NLM_F_ACK)
 
     def disable(self, sockfd):
         msg = cltcmd()
 
-        msg['cmd'] = IOAM6_CMD_CLT_UNSET
+        msg['cmd'] = IOAM6_CMD_PKT_ID_DISABLE
         msg['version'] = IOAM6_GENL_VERSION
-        msg['attrs'].append(('IOAM6_ATTR_CLT_SOCKFD', sockfd))
+        msg['attrs'].append(('IOAM6_ATTR_SOCKFD', sockfd))
 
         return self.nlm_request(msg, msg_type=self.prid, msg_flags=NLM_F_REQUEST | NLM_F_ACK)
 
