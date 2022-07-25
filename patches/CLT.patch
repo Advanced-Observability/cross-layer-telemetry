@@ -75,18 +75,9 @@ index ca4b22833754..0272d0b9e173 100644
  };
  
 diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
-index f7309452bdce..d2b148c8df07 100644
+index f7309452bdce..17e4589a9bb0 100644
 --- a/net/ipv4/tcp.c
 +++ b/net/ipv4/tcp.c
-@@ -1218,7 +1218,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
- 	int flags, err, copied = 0;
- 	int mss_now = 0, size_goal, copied_syn = 0;
- 	int process_backlog = 0;
--	bool zc = false;
-+	bool zc = false, slow;
- 	long timeo;
- 
- 	flags = msg->msg_flags;
 @@ -1299,9 +1299,14 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
  		int copy = 0;
  
