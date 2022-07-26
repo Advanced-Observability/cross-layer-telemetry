@@ -11,12 +11,9 @@ RUN apk add protobuf protobuf-dev && \
     go get google.golang.org/grpc
 
 WORKDIR /apps
-#TODO remove copy, wget directly from this repo
 COPY ioam-collector.go ioam-collector.go
 
-#TODO replace
-#RUN wget https://raw.githubusercontent.com/Advanced-Observability/ioam-api/clt/ioam_api.proto
-COPY ioam_api.proto ioam_api.proto
+RUN wget https://raw.githubusercontent.com/Advanced-Observability/ioam-api/clt/ioam_api.proto
 
 # Build IOAM collector
 RUN mkdir $GOPATH/src/ioam && \
