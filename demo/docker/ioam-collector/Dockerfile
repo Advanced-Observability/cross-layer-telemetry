@@ -1,24 +1,19 @@
-FROM golang:1.15-alpine
+FROM golang:1.19-alpine
 
-RUN apk add git
-
-# Install OpenTelemetry's Jaeger exporter
-RUN go get -u go.opentelemetry.io/otel/exporters/jaeger
-
-# Install Protobuf and gRPC for Golang
-RUN apk add protobuf protobuf-dev && \
-    go get github.com/golang/protobuf/protoc-gen-go && \
-    go get google.golang.org/grpc
+RUN apk add protobuf protobuf-dev
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 WORKDIR /apps
-COPY ioam-collector.go ioam-collector.go
 
+# Build IOAM API for gRPC
 RUN wget https://raw.githubusercontent.com/Advanced-Observability/ioam-api/clt/ioam_api.proto
+RUN protoc --go_out=. --go-grpc_out=. ioam_api.proto
 
 # Build IOAM collector
-RUN mkdir $GOPATH/src/ioam && \
-    protoc --go_out=plugins=grpc:$GOPATH/src/ioam ioam_api.proto
-
+RUN wget https://raw.githubusercontent.com/Advanced-Observability/ioam-collector-go-jaeger/main/ioam-collector.go
+RUN go mod init ioam-collector
+RUN go mod tidy
 RUN CGO_ENABLED=0 go build ioam-collector.go
 
 ENTRYPOINT ["/apps/ioam-collector"]

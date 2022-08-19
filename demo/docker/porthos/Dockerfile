@@ -1,6 +1,6 @@
 FROM python:3.8
 
-RUN apt update
+RUN apt update --fix-missing
 RUN apt install -y libmnl-dev bison flex
 
 RUN wget https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/iproute2-5.17.0.tar.xz && \
