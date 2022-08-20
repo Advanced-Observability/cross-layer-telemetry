@@ -41,7 +41,7 @@ services:
   ioam-collector:
     container_name: ioam-collector
     image: ioam-collector
-    #build: ./docker/ioam-collector
+    build: ./docker/ioam-collector
     environment:
       - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger-collector:14268/api/traces
     networks:
@@ -52,7 +52,7 @@ services:
   athos:
     container_name: athos
     image: athos
-    #build: ./docker/athos
+    build: ./docker/athos
     environment:
       - OTEL_EXPORTER_JAEGER_PROTOCOL=grpc
       - OTEL_EXPORTER_JAEGER_ENDPOINT=jaeger-collector:14250
@@ -74,7 +74,7 @@ services:
   porthos:
     container_name: porthos
     image: porthos
-    #build: ./docker/porthos
+    build: ./docker/porthos
     networks:
       ioam_subnet1:
         ipv6_address: db01::2
@@ -92,7 +92,7 @@ services:
   aramis:
     container_name: aramis
     image: aramis
-    #build: ./docker/aramis
+    build: ./docker/aramis
     environment:
       - IOAM_COLLECTOR=ioam-collector:7123
     networks:
