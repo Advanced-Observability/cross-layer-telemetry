@@ -1,4 +1,4 @@
-version: "2.4"
+version: "2.1"
 
 services:
   elasticsearch:
@@ -59,7 +59,7 @@ services:
     ports:
       - "15123:15123/tcp"
     networks:
-      ioam12_network:
+      ioam_subnet1:
         ipv6_address: db01::1
       collectors_network:
     cap_add:
@@ -76,9 +76,9 @@ services:
     image: porthos
     #build: ./docker/porthos
     networks:
-      ioam12_network:
+      ioam_subnet1:
         ipv6_address: db01::2
-      ioam23_network:
+      ioam_subnet2:
         ipv6_address: db02::1
     cap_add:
       - NET_ADMIN
@@ -96,7 +96,7 @@ services:
     environment:
       - IOAM_COLLECTOR=ioam-collector:7123
     networks:
-      ioam23_network:
+      ioam_subnet2:
         ipv6_address: db02::2
       collectors_network:
     cap_add:
@@ -109,27 +109,29 @@ services:
       - ioam-collector
 
 networks:
-  ioam12_network:
-    external:
-      name: ioam12_network
-#    driver: bridge
-#    enable_ipv6: true
-#    ipam:
-#      driver: default
-#      config:
-#        - subnet: db01::/64
-#        - gateway: db01::9
+  ioam_subnet1:
+    name: ioam_subnet1
+    enable_ipv6: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "true"
+    ipam:
+      driver: default
+      config:
+       - subnet: db01::/64
+         gateway: db01::9
 
-  ioam23_network:
-    external:
-      name: ioam23_network
-#    driver: bridge
-#    enable_ipv6: true
-#    ipam:
-#      driver: default
-#      config:
-#        - subnet: db02::/64
-#        - gateway: db02::9
+  ioam_subnet2:
+    name: ioam_subnet2
+    enable_ipv6: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "true"
+    ipam:
+      driver: default
+      config:
+       - subnet: db02::/64
+         gateway: db02::9
 
   collectors_network:
     name: collectors_network

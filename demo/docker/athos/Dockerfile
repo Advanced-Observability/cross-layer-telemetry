@@ -1,7 +1,7 @@
 FROM python:3.8
 
 RUN apt update --fix-missing
-RUN apt install -y libmnl-dev bison flex
+RUN apt install -y libmnl-dev bison flex tcpdump
 
 RUN wget https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/iproute2-5.17.0.tar.xz && \
     tar -Jxvf iproute2-5.17.0.tar.xz && \
@@ -11,6 +11,7 @@ RUN wget https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/iproute2-5
     make install
 
 RUN pip install -q --upgrade pip
+RUN pip install -q supervisor
 RUN pip install -q Flask==0.12.5
 RUN pip install -q opentelemetry-api
 RUN pip install -q opentelemetry-sdk
@@ -25,9 +26,9 @@ RUN pip install -q itsdangerous==2.0.1
 
 WORKDIR /apps
 COPY app.py app.py
+COPY supervisord.conf supervisord.conf
 RUN wget https://raw.githubusercontent.com/Advanced-Observability/cross-layer-telemetry/main/clt_genl.py
 
 EXPOSE 15123
 
-ENTRYPOINT ["python"]
-CMD ["/apps/app.py"]
+ENTRYPOINT ["/usr/local/bin/supervisord"]
