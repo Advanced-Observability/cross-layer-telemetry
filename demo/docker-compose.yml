@@ -1,0 +1,143 @@
+version: "2.1"
+
+services:
+  elasticsearch:
+    container_name: elasticsearch
+    image: elasticsearch:7.17.3
+    environment:
+      - discovery.type=single-node
+    networks:
+      - elasticsearch_network
+    volumes:
+      - /usr/share/elasticsearch/data
+
+  jaeger-query:
+    container_name: jaeger-query
+    image: jaegertracing/jaeger-query:latest
+    ports:
+      - "16686:16686/tcp"
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+    networks:
+      - elasticsearch_network
+    depends_on:
+      - elasticsearch
+    restart: on-failure
+
+  jaeger-collector:
+    container_name: jaeger-collector
+    image: jaegertracing/jaeger-collector:latest
+    environment:
+      - SPAN_STORAGE_TYPE=elasticsearch
+      - ES_SERVER_URLS=http://elasticsearch:9200
+    networks:
+      - collectors_network
+      - elasticsearch_network
+    depends_on:
+      - elasticsearch
+    restart: on-failure
+
+  ioam-collector:
+    container_name: ioam-collector
+    image: ioam-collector
+    build: ./docker/ioam-collector
+    environment:
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=http://jaeger-collector:14268/api/traces
+    networks:
+      - collectors_network
+    depends_on:
+      - jaeger-collector
+
+  athos:
+    container_name: athos
+    image: athos
+    build: ./docker/athos
+    environment:
+      - OTEL_EXPORTER_JAEGER_PROTOCOL=grpc
+      - OTEL_EXPORTER_JAEGER_ENDPOINT=jaeger-collector:14250
+    ports:
+      - "15123:15123/tcp"
+    networks:
+      ioam_subnet1:
+        ipv6_address: db01::1
+      collectors_network:
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.ioam6_id=1
+      - net.ipv6.conf.eth0.ioam6_id=11
+    depends_on:
+      - jaeger-collector
+      - aramis
+
+  porthos:
+    container_name: porthos
+    image: porthos
+    build: ./docker/porthos
+    networks:
+      ioam_subnet1:
+        ipv6_address: db01::2
+      ioam_subnet2:
+        ipv6_address: db02::1
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.ioam6_id=2
+      - net.ipv6.conf.eth0.ioam6_enabled=1
+      - net.ipv6.conf.eth0.ioam6_id=21
+      - net.ipv6.conf.eth1.ioam6_id=22
+
+  aramis:
+    container_name: aramis
+    image: aramis
+    build: ./docker/aramis
+    environment:
+      - IOAM_COLLECTOR=ioam-collector:7123
+    networks:
+      ioam_subnet2:
+        ipv6_address: db02::2
+      collectors_network:
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.ioam6_id=3
+      - net.ipv6.conf.eth0.ioam6_enabled=1
+      - net.ipv6.conf.eth0.ioam6_id=31
+    depends_on:
+      - ioam-collector
+
+networks:
+  ioam_subnet1:
+    name: ioam_subnet1
+    enable_ipv6: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "true"
+    ipam:
+      driver: default
+      config:
+       - subnet: db01::/64
+         gateway: db01::9
+
+  ioam_subnet2:
+    name: ioam_subnet2
+    enable_ipv6: true
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "true"
+    ipam:
+      driver: default
+      config:
+       - subnet: db02::/64
+         gateway: db02::9
+
+  collectors_network:
+    name: collectors_network
+    driver: bridge
+
+  elasticsearch_network:
+    name: elasticsearch_network
+    driver: bridge
+

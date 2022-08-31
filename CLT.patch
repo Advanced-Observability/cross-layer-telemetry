@@ -1,0 +1,276 @@
+diff --git a/include/linux/skbuff.h b/include/linux/skbuff.h
+index cd4a8268894a..92b93cd62802 100644
+--- a/include/linux/skbuff.h
++++ b/include/linux/skbuff.h
+@@ -1018,6 +1018,11 @@ struct sk_buff {
+ 	u64			kcov_handle;
+ #endif
+ 
++	struct {
++		__be64 high, low;
++	} id;
++	__be64 sid;
++
+ 	); /* end headers group */
+ 
+ 	/* These elements must be at the end, see alloc_skb() for details.  */
+diff --git a/include/net/sock.h b/include/net/sock.h
+index 5bed1ea7a722..502397a79d0a 100644
+--- a/include/net/sock.h
++++ b/include/net/sock.h
+@@ -537,6 +537,11 @@ struct sock {
+ #endif
+ 	struct rcu_head		sk_rcu;
+ 	netns_tracker		ns_tracker;
++
++	struct {
++		__be64 high, low;
++	} sk_pkt_id;
++	__be64 sk_pkt_sid;
+ };
+ 
+ enum sk_pacing {
+diff --git a/include/uapi/linux/ioam6.h b/include/uapi/linux/ioam6.h
+index ac4de376f0ce..b145f9e8d431 100644
+--- a/include/uapi/linux/ioam6.h
++++ b/include/uapi/linux/ioam6.h
+@@ -126,6 +126,11 @@ struct ioam6_trace_hdr {
+ #error "Please fix <asm/byteorder.h>"
+ #endif
+ 
++	struct {
++		__be64 high, low;
++	} pkt_id;
++	__be64 pkt_sid;
++
+ #define IOAM6_TRACE_DATA_SIZE_MAX 244
+ 	__u8	data[0];
+ } __attribute__((packed));
+diff --git a/include/uapi/linux/ioam6_genl.h b/include/uapi/linux/ioam6_genl.h
+index ca4b22833754..0272d0b9e173 100644
+--- a/include/uapi/linux/ioam6_genl.h
++++ b/include/uapi/linux/ioam6_genl.h
+@@ -26,6 +26,12 @@ enum {
+ 
+ 	IOAM6_ATTR_PAD,
+ 
++	/* Packet Identification */
++	IOAM6_ATTR_SOCKFD,	/* unsigned int */
++	IOAM6_ATTR_ID_HIGH,	/* u64 */
++	IOAM6_ATTR_ID_LOW,	/* u64 */
++	IOAM6_ATTR_SUBID,	/* u64 */
++
+ 	__IOAM6_ATTR_MAX,
+ };
+ 
+@@ -44,6 +50,10 @@ enum {
+ 
+ 	IOAM6_CMD_NS_SET_SCHEMA,
+ 
++	/* Packet Identification */
++	IOAM6_CMD_PKT_ID_ENABLE,
++	IOAM6_CMD_PKT_ID_DISABLE,
++
+ 	__IOAM6_CMD_MAX,
+ };
+ 
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index f7309452bdce..17e4589a9bb0 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -1299,9 +1299,14 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
+ 		int copy = 0;
+ 
+ 		skb = tcp_write_queue_tail(sk);
+-		if (skb)
++		if (skb) {
+ 			copy = size_goal - skb->len;
+ 
++			skb->id.high = READ_ONCE(sk->sk_pkt_id.high);
++			skb->id.low = READ_ONCE(sk->sk_pkt_id.low);
++			skb->sid = READ_ONCE(sk->sk_pkt_sid);
++		}
++
+ 		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
+ 			bool first_skb;
+ 
+@@ -1320,6 +1325,10 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
+ 			if (!skb)
+ 				goto wait_for_space;
+ 
++			skb->id.high = READ_ONCE(sk->sk_pkt_id.high);
++			skb->id.low = READ_ONCE(sk->sk_pkt_id.low);
++			skb->sid = READ_ONCE(sk->sk_pkt_sid);
++
+ 			process_backlog++;
+ 
+ 			tcp_skb_entail(sk, skb);
+diff --git a/net/ipv6/ioam6.c b/net/ipv6/ioam6.c
+index 1098131ed90c..c9560a07acc4 100644
+--- a/net/ipv6/ioam6.c
++++ b/net/ipv6/ioam6.c
+@@ -104,6 +104,17 @@ static const struct nla_policy ioam6_genl_policy_ns_sc[] = {
+ 	[IOAM6_ATTR_SC_NONE]	= { .type = NLA_FLAG },
+ };
+ 
++static const struct nla_policy ioam6_genl_policy_pktid_enable[] = {
++	[IOAM6_ATTR_SOCKFD]	= { .type = NLA_U32 },
++	[IOAM6_ATTR_ID_HIGH]	= { .type = NLA_U64 },
++	[IOAM6_ATTR_ID_LOW]	= { .type = NLA_U64 },
++	[IOAM6_ATTR_SUBID]	= { .type = NLA_U64 },
++};
++
++static const struct nla_policy ioam6_genl_policy_pktid_disable[] = {
++	[IOAM6_ATTR_SOCKFD]	= { .type = NLA_U32 },
++};
++
+ static int ioam6_genl_addns(struct sk_buff *skb, struct genl_info *info)
+ {
+ 	struct ioam6_pernet_data *nsdata;
+@@ -553,6 +564,108 @@ static int ioam6_genl_ns_set_schema(struct sk_buff *skb, struct genl_info *info)
+ 	return err;
+ }
+ 
++static int ioam6_genl_pktid_enable(struct sk_buff *skb, struct genl_info *info)
++{
++	u64 id_h, id_l, sid;
++	struct socket *sock;
++	struct fd f;
++	bool slow;
++	int err;
++
++	if (!info->attrs[IOAM6_ATTR_SOCKFD] ||
++	    !info->attrs[IOAM6_ATTR_ID_HIGH] ||
++	    !info->attrs[IOAM6_ATTR_ID_LOW] ||
++	    !info->attrs[IOAM6_ATTR_SUBID]) {
++		err = -EINVAL;
++		goto out;
++	}
++
++	f = fdget_raw(nla_get_u32(info->attrs[IOAM6_ATTR_SOCKFD]));
++	if (!f.file) {
++		err = -EBADF;
++		goto out;
++	}
++
++	if (!S_ISSOCK(f.file->f_path.dentry->d_inode->i_mode)) {
++		err = -ENOTSOCK;
++		goto release;
++	}
++
++	sock = sock_from_file(f.file);
++	if (!sock) {
++		err = -ENOTSOCK;
++		goto release;
++	}
++
++	if (!sock->sk || sock->sk->sk_family != AF_INET6) {
++		err = -ESOCKTNOSUPPORT;
++		goto release;
++	}
++
++	id_h = cpu_to_be64(nla_get_u64(info->attrs[IOAM6_ATTR_ID_HIGH]));
++	id_l = cpu_to_be64(nla_get_u64(info->attrs[IOAM6_ATTR_ID_LOW]));
++	sid = cpu_to_be64(nla_get_u64(info->attrs[IOAM6_ATTR_SUBID]));
++
++	slow = lock_sock_fast(sock->sk);
++	WRITE_ONCE(sock->sk->sk_pkt_id.high, id_h);
++	WRITE_ONCE(sock->sk->sk_pkt_id.low, id_l);
++	WRITE_ONCE(sock->sk->sk_pkt_sid, sid);
++	unlock_sock_fast(sock->sk, slow);
++
++	err = 0;
++release:
++	fdput(f);
++out:
++	return err;
++}
++
++static int ioam6_genl_pktid_disable(struct sk_buff *skb, struct genl_info *info)
++{
++	struct socket *sock;
++	struct fd f;
++	bool slow;
++	int err;
++
++	if (!info->attrs[IOAM6_ATTR_SOCKFD]) {
++		err = -EINVAL;
++		goto out;
++	}
++
++	f = fdget_raw(nla_get_u32(info->attrs[IOAM6_ATTR_SOCKFD]));
++	if (!f.file) {
++		err = -EBADF;
++		goto out;
++	}
++
++	if (!S_ISSOCK(f.file->f_path.dentry->d_inode->i_mode)) {
++		err = -ENOTSOCK;
++		goto release;
++	}
++
++	sock = sock_from_file(f.file);
++	if (!sock) {
++		err = -ENOTSOCK;
++		goto release;
++	}
++
++	if (!sock->sk || sock->sk->sk_family != AF_INET6) {
++		err = -ESOCKTNOSUPPORT;
++		goto release;
++	}
++
++	slow = lock_sock_fast(sock->sk);
++	WRITE_ONCE(sock->sk->sk_pkt_id.high, 0);
++	WRITE_ONCE(sock->sk->sk_pkt_id.low, 0);
++	WRITE_ONCE(sock->sk->sk_pkt_sid, 0);
++	unlock_sock_fast(sock->sk, slow);
++
++	err = 0;
++release:
++	fdput(f);
++out:
++	return err;
++}
++
+ static const struct genl_ops ioam6_genl_ops[] = {
+ 	{
+ 		.cmd	= IOAM6_CMD_ADD_NAMESPACE,
+@@ -610,6 +723,22 @@ static const struct genl_ops ioam6_genl_ops[] = {
+ 		.policy	= ioam6_genl_policy_ns_sc,
+ 		.maxattr = ARRAY_SIZE(ioam6_genl_policy_ns_sc) - 1,
+ 	},
++	{
++		.cmd	= IOAM6_CMD_PKT_ID_ENABLE,
++		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
++		.doit	= ioam6_genl_pktid_enable,
++		.flags	= GENL_ADMIN_PERM,
++		.policy	= ioam6_genl_policy_pktid_enable,
++		.maxattr = ARRAY_SIZE(ioam6_genl_policy_pktid_enable) - 1,
++	},
++	{
++		.cmd	= IOAM6_CMD_PKT_ID_DISABLE,
++		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
++		.doit	= ioam6_genl_pktid_disable,
++		.flags	= GENL_ADMIN_PERM,
++		.policy	= ioam6_genl_policy_pktid_disable,
++		.maxattr = ARRAY_SIZE(ioam6_genl_policy_pktid_disable) - 1,
++	},
+ };
+ 
+ static struct genl_family ioam6_genl_family __ro_after_init = {
+diff --git a/net/ipv6/ioam6_iptunnel.c b/net/ipv6/ioam6_iptunnel.c
+index f6f5b83dd954..54722bbe57f9 100644
+--- a/net/ipv6/ioam6_iptunnel.c
++++ b/net/ipv6/ioam6_iptunnel.c
+@@ -212,6 +212,10 @@ static int ioam6_do_fill(struct net *net, struct sk_buff *skb)
+ 					   + sizeof(struct ipv6_hopopt_hdr) + 2
+ 					   + sizeof(struct ioam6_hdr));
+ 
++	trace->pkt_id.high = skb->id.high;
++	trace->pkt_id.low = skb->id.low;
++	trace->pkt_sid = skb->sid;
++
+ 	ns = ioam6_namespace(net, trace->namespace_id);
+ 	if (ns)
+ 		ioam6_fill_trace_data(skb, ns, trace, false);
