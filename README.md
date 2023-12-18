@@ -10,7 +10,7 @@ The chosen Application Performance Management (APM) tool based on distributed tr
 
 Some key components are crucial for the CLT ecosystem:
 - a recent kernel with IOAM (>= 5.17) [patched](./CLT.patch) for Cross-Layer Telemetry
-- the CLT [client library](./clt_genl.py)
+- the CLT client library in [Python](./clt_genl.py) or in [Go](./clt_genl_go/)
 - an [IOAM Agent](https://github.com/Advanced-Observability/ioam-agent-python/tree/clt)
 - an [IOAM Collector](https://github.com/Advanced-Observability/ioam-collector-go-jaeger)
 
