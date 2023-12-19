@@ -27,7 +27,7 @@ RUN pip install -q itsdangerous==2.0.1
 WORKDIR /apps
 COPY app.py app.py
 COPY supervisord.conf supervisord.conf
-RUN wget https://raw.githubusercontent.com/Advanced-Observability/cross-layer-telemetry/main/clt_genl.py
+RUN wget https://raw.githubusercontent.com/Advanced-Observability/cross-layer-telemetry/main/library/python/clt_genl.py
 
 EXPOSE 15123
 
