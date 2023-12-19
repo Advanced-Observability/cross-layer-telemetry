@@ -1,8 +1,6 @@
-# CLT Generic Netlink Go
+# CLT Library in Go
 
-This module allows to enable or disable CLT in the Linux kernel from software in Go.
-
-It is an equivalent of [clt_genl.py](../clt_genl.py), which is written in Python.
+Implementation in Go of the library to enable or disable CLT.
 
 ## Usage
 
