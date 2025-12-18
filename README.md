@@ -22,7 +22,7 @@ CLT correlates APM traces with network telemetry, based on APM trace and span ID
 
 You can watch the entire demo by clicking on the following video:
 
-[![GIF_video](./images/video.gif?raw=true "CLT demo video")](https://youtu.be/LD1Dv9MPoJ8)
+[![video]()](https://github.com/user-attachments/assets/c780416d-8b0c-48fe-9c1a-865ab4de2e28)
 
 Note: this video was for a previous version of CLT, but it's still the same result globally.
 
